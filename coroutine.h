@@ -83,6 +83,7 @@ typedef struct _ef_coroutine_pool {
     /*
      * chain all coroutines in this pool together
      */
+    // 所有的协程的链表
     ef_list_entry_t full_list;
 
     /*
@@ -93,16 +94,19 @@ typedef struct _ef_coroutine_pool {
     /*
      * the number of coroutines in this pool
      */
+    // 所有协程的数量
     int full_count;
 
     /*
      * the number of exited coroutines in this pool
      */
+    // 退出协程的数量
     int free_count;
 
     /*
      * total run count of coroutines in the pool
      */
+    // 运行的协程数量
     unsigned long run_count;
 } ef_coroutine_pool_t;
 

@@ -74,10 +74,12 @@ ef_coroutine_t *ef_coroutine_create(ef_coroutine_pool_t *pool, size_t header_siz
     return co;
 }
 
+// 切换到co协程执行
 long ef_coroutine_resume(ef_coroutine_pool_t *pool, ef_coroutine_t *co, long to_yield)
 {
     long retval = 0;
 
+    // 切换到co协程执行
     int res = ef_fiber_resume(&pool->fiber_sched, &co->fiber, to_yield, &retval);
     if (res < 0) {
         return retval;

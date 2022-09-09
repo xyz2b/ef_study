@@ -44,6 +44,7 @@ struct _ef_poll_data {
     int type;
     // socket
     int fd;
+    // 负责此socket的协程
     ef_routine_t *routine_ptr;
     // 关联的runtime结构体
     ef_runtime_t *runtime_ptr;

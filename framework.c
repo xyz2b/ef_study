@@ -65,6 +65,7 @@ inline int ef_routine_run(ef_runtime_t *rt, ef_routine_proc_t proc, int socket)
         er->poll_data.routine_ptr = er;
         er->poll_data.runtime_ptr = rt;
         er->poll_data.ef_proc = proc;
+        // 唤醒协程执行
         ef_coroutine_resume(&rt->co_pool, &er->co, 0);
         return 0;
     }
@@ -229,7 +230,7 @@ int ef_run_loop(ef_runtime_t *rt)
             }
         }
 
-        // 如果协程池中没有可用协程，需要创建协程去处理新建的连接
+        // 刚监听之后，还没建立过客户端连接时，第一次创建客户端连接时，还没有协程被创建，所以协程池中没有可用协程，需要创建协程去处理新建的连接
         /*
          * handle queued connections
          */

@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
     {
         return -1;
     }
-    addr_in.sin_port = htons(80);
+    addr_in.sin_port = htons(8081);
     retval = bind(sockfd, (const struct sockaddr *)&addr_in, sizeof(addr_in));
     if(retval < 0)
     {

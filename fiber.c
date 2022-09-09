@@ -43,11 +43,63 @@ ef_fiber_t *ef_fiber_create(ef_fiber_sched_t *rt, size_t stack_size, size_t head
     /*
      * make the stack_size an integer multiple of page_size
      */
+    // 将自定义的栈大小，对齐到内存页的大小（不足一页的，将其置为一页的大小，大于一页的有不满一页的补齐）
+    // stack_size最小为一个页
     stack_size = (size_t)((stack_size + page_size - 1) & ~(page_size - 1));
 
     /*
      * reserve the stack area, no physical pages here
      */
+    /**
+     * 内存映射，简而言之就是将用户空间的一段内存区域映射到内核空间，映射成功后，用户对这段内存区域的修改可以直接反映到内核空间，同样，内核空间对这段区域的修改也直接反映用户空间。那么对于内核空间<---->用户空间两者之间需要大量数据传输等操作的话效率是非常高的。
+     * void * mmap(void *start, size_t length, int prot , int flags, int fd, off_t offset)
+     * start：要映射到的内存区域的起始地址，通常都是用NULL（NULL即为0）。NULL表示由内核来指定该内存地址
+     * prot：期望的内存保护标志，不能与文件的打开模式冲突。是以下的某个值，可以通过or运算合理地组合在一起
+            PROT_EXEC //页内容可以被执行
+            PROT_READ  //页内容可以被读取
+            PROT_WRITE //页可以被写入
+            PROT_NONE  //页不可访问
+
+        flags：指定映射对象的类型，映射选项和映射页是否可以共享。它的值可以是一个或者多个以下位的组合体
+            MAP_FIXED ：使用指定的映射起始地址，如果由start和len参数指定的内存区重叠于现存的映射空间，重叠部分将会被丢弃。如果指定的起始地址不可用，操作将会失败。并且起始地址必须落在页的边界上。
+            MAP_SHARED ：对映射区域的写入数据会复制回文件内, 而且允许其他映射该文件的进程共享。
+            MAP_PRIVATE ：建立一个写入时拷贝的私有映射。内存区域的写入不会影响到原文件。这个标志和以上标志是互斥的，只能使用其中一个。
+            MAP_DENYWRITE ：这个标志被忽略。
+            MAP_EXECUTABLE ：同上
+            MAP_NORESERVE ：不要为这个映射保留交换空间。当交换空间被保留，对映射区修改的可能会得到保证。当交换空间不被保留，同时内存不足，对映射区的修改会引起段违例信号。
+            MAP_LOCKED ：锁定映射区的页面，从而防止页面被交换出内存。
+            MAP_GROWSDOWN ：用于堆栈，告诉内核VM系统，映射区可以向下扩展。
+            MAP_ANONYMOUS ：匿名映射，映射区不与任何文件关联。
+            MAP_ANON ：MAP_ANONYMOUS的别称，不再被使用。
+            MAP_FILE ：兼容标志，被忽略。
+            MAP_32BIT ：将映射区放在进程地址空间的低2GB，MAP_FIXED指定时会被忽略。当前这个标志只在x86-64平台上得到支持。
+            MAP_POPULATE ：为文件映射通过预读的方式准备好页表。随后对映射区的访问不会被页违例阻塞。
+            MAP_NONBLOCK ：仅和MAP_POPULATE一起使用时才有意义。不执行预读，只为已存在于内存中的页面建立页表入口。
+
+        fd：文件描述符（由open函数返回）
+        offset：表示被映射对象（即文件）从那里开始对映，通常都是用0。 该值应该为大小为PAGE_SIZE的整数倍
+
+        成功执行时，mmap()返回被映射区的指针，munmap()返回0。失败时，mmap()返回MAP_FAILED[其值为(void *)-1]，munmap返回-1。errno被设为以下的某个值
+            EACCES：访问出错
+            EAGAIN：文件已被锁定，或者太多的内存已被锁定
+            EBADF：fd不是有效的文件描述词
+            EINVAL：一个或者多个参数无效
+            ENFILE：已达到系统对打开文件的限制
+            ENODEV：指定文件所在的文件系统不支持内存映射
+            ENOMEM：内存不足，或者进程已超出最大内存映射数量
+            EPERM：权能不足，操作不允许
+            ETXTBSY：已写的方式打开文件，同时指定MAP_DENYWRITE标志
+            SIGSEGV：试着向只读区写入
+            SIGBUS：试着访问不属于进程的内存区
+
+
+
+        int munmap(void *start, size_t length)
+        start：要取消映射的内存区域的起始地址
+        length：要取消映射的内存区域的大小。
+        成功执行时munmap()返回0。失败时munmap返回-1.
+     * */
+     // 相当于申请了一段stack_size大小的内存，设置这段内存为不可访问，当协程栈溢出到不可访问的地方会触发SIGSEGV信号，从而被我们捕获然后扩展协程栈，起始就是将这块不可访问的内存的一部分设置为可读可写
     stack = mmap(NULL, stack_size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (MAP_FAILED == stack) {
         return NULL;
@@ -56,6 +108,7 @@ ef_fiber_t *ef_fiber_create(ef_fiber_sched_t *rt, size_t stack_size, size_t head
     /*
      * map the highest page in the stack area
      */
+    // 预留出stack内存中最最高位地址的一个页，将其设置为可读可写，即先使用这一个页
     if (mprotect((char *)stack + stack_size - page_size, page_size, PROT_READ | PROT_WRITE) < 0) {
         munmap(stack, stack_size);
         return NULL;
@@ -65,18 +118,22 @@ ef_fiber_t *ef_fiber_create(ef_fiber_sched_t *rt, size_t stack_size, size_t head
      * the topmost header_size bytes used by ef_fiber_t and
      * maybe some outter struct which ef_fiber_t nested in
      */
+    // 从上面划分出来的可读可写的一个页中，再划分出来ef_fiber_t结构体的内存
     fiber = (ef_fiber_t*)((char *)stack + stack_size - header_size);
-    fiber->stack_size = stack_size;
-    fiber->stack_area = stack;
-    fiber->stack_upper = (char *)stack + stack_size - header_size;
-    fiber->stack_lower = (char *)stack + stack_size - page_size;
-    fiber->sched = rt;
+    // 设置ef_fiber_t结构的一些属性（主要是协程栈的位置）
+    fiber->stack_size = stack_size; // 协程栈最大大小（目前有部分是不可访问的内存）
+    fiber->stack_area = stack;  // 协程栈最大的栈底（目前有部分是不可访问的内存）
+    fiber->stack_upper = (char *)stack + stack_size - header_size;  // 协程栈的栈顶
+    fiber->stack_lower = (char *)stack + stack_size - page_size;    // 协程栈目前所能使用内存的最低位地址（可读可写的内存最低地址，初始时为一个页）
+    fiber->sched = rt;  // 将调度器关联到协程上
+    // 初始化协程
     ef_fiber_init(fiber, fiber_proc, param);
     return fiber;
 }
 
 void ef_fiber_init(ef_fiber_t *fiber, ef_fiber_proc_t fiber_proc, void *param)
 {
+    // 当前协程所对应栈的栈顶指针（即从可读可写的内存中，划分出来一块作为当前协程栈），默认是指向上面划分的可读可写的一个page的内存的128B处
     fiber->stack_ptr = ef_fiber_internal_init(fiber, fiber_proc, (param != NULL) ? param : fiber);
 }
 
@@ -89,6 +146,7 @@ void ef_fiber_delete(ef_fiber_t *fiber)
     munmap(fiber->stack_area, fiber->stack_size);
 }
 
+// 切换到to协程执行
 int ef_fiber_resume(ef_fiber_sched_t *rt, ef_fiber_t *to, long sndval, long *retval)
 {
     long ret;
@@ -104,9 +162,12 @@ int ef_fiber_resume(ef_fiber_sched_t *rt, ef_fiber_t *to, long sndval, long *ret
         return ERROR_FIBER_NOT_INITED;
     }
 
+    // 将to协程作为当前执行协程
     current = rt->current_fiber;
     to->parent = current;
     rt->current_fiber = to;
+    // 真正切换逻辑
+    // ret == sndval
     ret = ef_fiber_internal_swap(to->stack_ptr, &current->stack_ptr, sndval);
 
     if (retval) {

@@ -46,7 +46,10 @@
 .text
 
 ef_fiber_internal_swap:
+# rdx: to_yield
+# to_yield标识保存在rax中，作为返回值返回
 mov %rdx,%rax
+# 保存一堆寄存器的值，保存现场，这个是保存在当前协程栈中
 push %rbx
 push %rbp
 push %rsi
@@ -59,10 +62,17 @@ push %r12
 push %r13
 push %r14
 push %r15
+# 压入rflags寄存器的值，8个字节
 pushfq
+# rsi: &current->stack_ptr
+# 将当前协程的栈指针rsp存储到协程的stack_ptr处
 mov %rsp,(%rsi)
+# rdi: to->stack_ptr
+# 将要切换执行的协程的栈指针送到rsp中，完成栈切换
 mov %rdi,%rsp
 _ef_fiber_restore:
+# 执行完切栈动作之后，后面执行的指令都是在需要被执行的协程栈中
+# 从需要被执行的协程栈中弹出一些值到寄存器，当前栈指针就是stack_ptr
 popfq
 pop %r15
 pop %r14
@@ -72,10 +82,15 @@ pop %r11
 pop %r10
 pop %r9
 pop %r8
+# rdi: param or fiber
 pop %rdi
+# rsi: 0
 pop %rsi
+# rbp: stack_upper
 pop %rbp
+# rbx: 0
 pop %rbx
+# ret指令执行时，从栈中弹出8个字节到指令指针寄存rip，正好是fiber_proc的函数地址
 ret
 
 _ef_fiber_exit:
@@ -94,6 +109,10 @@ mov %rax,FIBER_STATUS_OFFSET(%rdi)
 mov %rdi,%rcx
 mov FIBER_STACK_UPPER_OFFSET(%rdi),%rdi
 mov %rcx,-8(%rdi)
+# 取有效地址，也就是取偏移地址，即C语言中的取地址符&
+# leaq a(b, c, d), %rax
+# leaq a(b, c, d), %rax 先计算地址a + b + c * d，然后把最终地址载到寄存器rax中
+# 即算出_ef_fiber_exit函数首条指令的地址传送到rax寄存器中
 lea _ef_fiber_exit(%rip),%rax
 mov %rax,-16(%rdi)
 mov %rsi,-24(%rdi)
