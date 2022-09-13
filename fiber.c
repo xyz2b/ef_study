@@ -176,6 +176,7 @@ int ef_fiber_resume(ef_fiber_sched_t *rt, ef_fiber_t *to, long sndval, long *ret
     return 0;
 }
 
+// 当成协程让出CPU，切回其父协程执行
 long ef_fiber_yield(ef_fiber_sched_t *rt, long sndval)
 {
     ef_fiber_t *current = rt->current_fiber;

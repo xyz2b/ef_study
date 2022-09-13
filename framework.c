@@ -38,6 +38,7 @@ ef_runtime_t *ef_runtime = NULL;
 inline int ef_queue_fd(ef_runtime_t *rt, ef_listen_info_t *li, int fd) __attribute__((always_inline));
 inline int ef_routine_run(ef_runtime_t *rt, ef_routine_proc_t proc, int socket) __attribute__((always_inline));
 
+// 由于创建这个处理函数的协程时，传入的参数是NULL，所以这个param拿到的是fiber结构体，fiber结构体在ef_routine_t结构体中
 long ef_proc(void *param)
 {
     ef_routine_t *er = (ef_routine_t*)param;
@@ -45,6 +46,7 @@ long ef_proc(void *param)
     long retval = 0;
 
     if (er->poll_data.ef_proc) {
+        // 这个才是真正的事件处理函数
         retval = er->poll_data.ef_proc(fd, er);
     }
 
@@ -58,6 +60,7 @@ long ef_proc(void *param)
 
 inline int ef_routine_run(ef_runtime_t *rt, ef_routine_proc_t proc, int socket)
 {
+    // 创建协程时，传入的协程的执行函数是ef_proc，参数为NULL
     ef_routine_t *er = (ef_routine_t*)ef_coroutine_create(&rt->co_pool, sizeof(ef_routine_t), ef_proc, NULL);
     if (er) {
         er->poll_data.type = FD_TYPE_RWC;

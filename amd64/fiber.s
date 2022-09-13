@@ -90,7 +90,7 @@ pop %rsi
 pop %rbp
 # rbx: 0
 pop %rbx
-# ret指令执行时，从栈中弹出8个字节到指令指针寄存rip，正好是fiber_proc的函数地址
+# ret指令执行时，从栈中弹出8个字节到指令指针寄存rip，正好是fiber_proc的函数地址，之后开始执行fiber_proc函数，参数就是rdi中的param
 ret
 
 _ef_fiber_exit:

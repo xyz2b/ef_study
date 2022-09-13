@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
     }
     struct sockaddr_in addr_in = {0};
     addr_in.sin_family = AF_INET;
-    addr_in.sin_port = htons(8080);
+    addr_in.sin_port = htons(8081);
     int retval = bind(sockfd, (const struct sockaddr *)&addr_in, sizeof(addr_in));
     if(retval < 0)
     {
@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
     {
         return -1;
     }
-    addr_in.sin_port = htons(8081);
+    addr_in.sin_port = htons(8082);
     retval = bind(sockfd, (const struct sockaddr *)&addr_in, sizeof(addr_in));
     if(retval < 0)
     {
