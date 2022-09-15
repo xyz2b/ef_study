@@ -65,7 +65,7 @@ push %r15
 # 压入rflags寄存器的值，8个字节
 pushfq
 # rsi: &current->stack_ptr
-# 将当前协程的栈指针rsp存储到协程的stack_ptr处
+# 将当前协程的栈指针rsp存储到当前协程的stack_ptr处(为了之后将栈切换回来，切换回来之后，栈指针指向之前最后保存的r15寄存器的内容，然后会从popfq指令开始执行，因为执行切换栈的指令之后，rip是指向popfq指令的，之后正好从栈中弹出之前保存的一些寄存器)
 mov %rsp,(%rsi)
 # rdi: to->stack_ptr
 # 将要切换执行的协程的栈指针送到rsp中，完成栈切换
